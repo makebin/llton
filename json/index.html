@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <title>增强 JSON 查看与结构提取工具</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="./index.css">
+</head>
+
+<body>
+  <div class="app">
+    <div class="card">
+      <div class="panel">
+        <div class="row">
+          <div style="flex:1">
+            <label class="muted small">JSON 输入</label>
+            <textarea id="jsonInput" placeholder='在这里粘贴 JSON，支持对象或数组（默认全部展开）'></textarea>
+          </div>
+        </div>
+
+        <div class="controls">
+          <input id="titleInput" type="text" placeholder="保存标题（可选）"
+            style="padding:8px;border-radius:8px;border:1px solid #eef2ff;width:260px" />
+          <button class="btn" id="formatBtn">格式化</button>
+          <button class="btn primary" id="saveBtn">保存</button>
+          <div class="controls-right">
+            <button class="btn" id="expandAllBtn">全部展开</button>
+            <button class="btn" id="collapseAllBtn">全部折叠</button>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="searchbar" style="flex:1">
+            <input id="searchInput" type="text" placeholder="搜索 key 或 value"
+              style="padding:8px;border-radius:8px;border:1px solid #eef2ff;width:320px" />
+            <button class="btn" id="searchBtn">搜索</button>
+            <button class="btn" id="prevBtn">上一个</button>
+            <button class="btn" id="nextBtn">下一个</button>
+            <span class="pill" id="searchCount">0 结果</span>
+          </div>
+
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn" id="genTsBtn">生成 TypeScript</button>
+            <button class="btn" id="genJsBtn">生成 JavaScript Schema</button>
+            <button class="btn ghost" id="copySchemaBtn">复制结构</button>
+          </div>
+        </div>
+
+        <div id="viewer" class="small card"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="panel full">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>结构提取结果</strong>
+          <div class="muted">根类型名: <span class="pill" id="rootName">Root</span></div>
+        </div>
+        <pre id="schemaOutput" class="schemaOutput">// 点击上方按钮生成 TS 或 JS 结构</pre>
+
+        <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+          <button class="btn" id="clearStorageBtn">清空本地缓存</button>
+          <div class="muted" style="margin-left:auto">本地缓存（点击加载）</div>
+        </div>
+        <div class="storage-list" id="storageList" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="card full" style="display:flex;gap:10px;align-items:center;justify-content:space-between">
+      <div class="muted">提示：点击 <span style="color:#b91c1c">key</span> 或 <span style="color:#065f46">value</span>
+        可复制到剪贴板，右键 key 可复制路径
+      </div>
+      <div class="muted">版本：增强合并 dedupe • 默认全部展开</div>
+    </div>
+  </div>
+
+  <div id="toast" style="display:none" class="toast"></div>
+
+  <script>
+    // DOM
+    const jsonInput = document.getElementById('jsonInput');
+    const viewer = document.getElementById('viewer');
+    const formatBtn = document.getElementById('formatBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const expandAllBtn = document.getElementById('expandAllBtn');
+    const collapseAllBtn = document.getElementById('collapseAllBtn');
+    const genTsBtn = document.getElementById('genTsBtn');
+    const genJsBtn = document.getElementById('genJsBtn');
+    const copySchemaBtn = document.getElementById('copySchemaBtn');
+    const schemaOutput = document.getElementById('schemaOutput');
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const searchCount = document.getElementById('searchCount');
+    const storageList = document.getElementById('storageList');
+    const clearStorageBtn = document.getElementById('clearStorageBtn');
+    const titleInput = document.getElementById('titleInput');
+    const toastEl = document.getElementById('toast');
+
+    // State for search
+    let searchResults = [];
+    let currentSearchIndex = -1;
+
+    // Utility: toast
+    function toast(text, ms = 1200) {
+      toastEl.textContent = text;
+      toastEl.style.display = 'block';
+      setTimeout(() => toastEl.style.display = 'none', ms);
+    }
+
+    // Safe JSON parse with whitespace trimming
+    function tryParse(str) {
+      try { return JSON.parse(str); } catch (e) { return null; }
+    }
+
+    // copy value
+    function copyValue(v) {
+      const toCopy = (typeof v === 'object') ? JSON.stringify(v) : String(v);
+      navigator.clipboard.writeText(toCopy).catch(() => { });
+    }
+
+    // Render JSON with optional chain path
+    function renderJson(obj, path = 'data') {
+      const container = document.createElement('div');
+
+      function rec(value, keyName, parent, path) {
+        if (typeof value !== 'object' || value === null) {
+          const span = document.createElement('span');
+          span.className = 'value';
+          const text = JSON.stringify(value);
+          span.textContent = text;
+          span.title = '点击复制 value';
+          span.style.cursor = 'pointer';
+          span.addEventListener('click', () => {
+            copyValue(value);
+            toast('已复制 value');
+          });
+          return span;
+        }
+
+        const isArray = Array.isArray(value);
+        const wrapper = document.createElement('span');
+
+        const toggle = document.createElement('span');
+        toggle.className = 'toggle';
+        toggle.textContent = '▼';
+        toggle.title = '点击折叠/展开';
+        toggle.style.userSelect = 'none';
+        toggle.addEventListener('click', () => {
+          const body = wrapper.querySelector(':scope > .body');
+          if (!body) return;
+          if (body.style.display === 'none') { body.style.display = 'block'; toggle.textContent = '▼'; }
+          else { body.style.display = 'none'; toggle.textContent = '▶'; }
+        });
+        wrapper.appendChild(toggle);
+
+        const bracketOpen = document.createElement('span');
+        bracketOpen.className = 'bracket';
+        bracketOpen.textContent = isArray ? '[' : '{';
+        wrapper.appendChild(bracketOpen);
+
+        const body = document.createElement('div');
+        body.className = 'body';
+        body.style.marginLeft = '18px';
+        body.style.display = 'block';
+
+        if (isArray) {
+          value.forEach((item, idx) => {
+            const line = document.createElement('div');
+            line.style.display = 'flex';
+            line.style.gap = '6px';
+            const idxLabel = document.createElement('span');
+            idxLabel.className = 'muted';
+            idxLabel.textContent = idx + ':';
+            line.appendChild(idxLabel);
+            line.appendChild(rec(item, `${keyName}[${idx}]`, wrapper, `${path}?.[${idx}]`));
+            body.appendChild(line);
+          });
+        } else {
+          Object.keys(value).sort().forEach((k, i) => {
+            const line = document.createElement('div');
+            line.style.display = 'flex';
+            line.style.gap = '6px';
+
+            const keySpan = document.createElement('span');
+            keySpan.className = 'key';
+            keySpan.textContent = `"${k}"`;
+            keySpan.title = '点击复制 key';
+            keySpan.style.cursor = 'pointer';
+
+            // 左键复制 key
+            keySpan.addEventListener('click', (e) => {
+              e.stopPropagation();
+              copyValue(k);
+              toast('已复制 key');
+            });
+
+            // 右键复制路径
+            keySpan.addEventListener('contextmenu', (e) => {
+              e.preventDefault();
+              const fullPath = `${path}?.${k}`;
+              navigator.clipboard.writeText(fullPath).then(() => {
+                toast('已复制路径: ' + fullPath);
+              });
+            });
+
+            line.appendChild(keySpan);
+            line.appendChild(document.createTextNode(': '));
+            line.appendChild(rec(value[k], k, wrapper, `${path}?.${k}`));
+            if (i < Object.keys(value).length - 1) line.appendChild(document.createTextNode(','));
+            body.appendChild(line);
+          });
+        }
+
+        wrapper.appendChild(body);
+
+        const bracketClose = document.createElement('span');
+        bracketClose.className = 'bracket';
+        bracketClose.textContent = isArray ? ']' : '}';
+        wrapper.appendChild(bracketClose);
+
+        return wrapper;
+      }
+
+      container.appendChild(rec(obj, 'root', container, path));
+      viewer.innerHTML = '';
+      viewer.appendChild(container);
+    }
+
+    // Format button
+    formatBtn.addEventListener('click', () => {
+      const txt = jsonInput.value.trim();
+      const parsed = tryParse(txt);
+      if (!parsed) { alert('无效 JSON，请检查格式'); return; }
+      jsonInput.value = JSON.stringify(parsed, null, 2);
+      renderJson(parsed);
+      clearSearch();
+    });
+
+    // Save / load storage with update support
+    function saveJson() {
+      const txt = jsonInput.value.trim();
+      const parsed = tryParse(txt);
+      if (!parsed) { alert('无效 JSON，无法保存'); return; }
+      let title = titleInput.value.trim();
+      if (!title) title = `JSON-${Date.now()}`;
+      localStorage.setItem('json-viewer-' + title, txt);
+      loadStorage();
+      toast('已保存: ' + title);
+    }
+    saveBtn.addEventListener('click', saveJson);
+
+    function loadStorage() {
+      storageList.innerHTML = '';
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('json-viewer-')).sort().reverse();
+      keys.forEach(k => {
+        const title = k.replace('json-viewer-', '');
+        const div = document.createElement('div');
+        div.className = 'storage-item';
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.alignItems = 'center';
+
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = title;
+        titleSpan.style.cursor = 'pointer';
+        titleSpan.addEventListener('click', () => {
+          const txt = localStorage.getItem(k);
+          jsonInput.value = txt;
+          const parsed = tryParse(txt);
+          if (parsed) renderJson(parsed);
+        });
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '删除';
+        deleteBtn.className = 'btn ghost';
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (confirm(`删除 "${title}" 吗？`)) {
+            localStorage.removeItem(k);
+            loadStorage();
+            toast(`已删除: ${title}`);
+          }
+        });
+
+        div.appendChild(titleSpan);
+        div.appendChild(deleteBtn);
+        storageList.appendChild(div);
+      });
+    }
+
+    clearStorageBtn.addEventListener('click', () => {
+      if (!confirm('清空所有本地缓存？')) return;
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('json-viewer-'));
+      keys.forEach(k => localStorage.removeItem(k));
+      loadStorage();
+      toast('本地缓存已清空');
+    });
+
+    // expand/collapse
+    expandAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('#viewer .body').forEach(b => b.style.display = 'block');
+      document.querySelectorAll('#viewer .toggle').forEach(t => t.textContent = '▼');
+    });
+    collapseAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('#viewer .body').forEach(b => b.style.display = 'none');
+      document.querySelectorAll('#viewer .toggle').forEach(t => t.textContent = '▶');
+    });
+
+    // search
+    function clearSearch() {
+      searchResults = []; currentSearchIndex = -1; searchCount.textContent = '0 结果';
+      const parsed = tryParse(jsonInput.value.trim());
+      if (parsed) renderJson(parsed);
+    }
+
+    searchBtn.addEventListener('click', () => {
+      const k = searchInput.value.trim();
+      if (!k) { clearSearch(); return; }
+      searchResults = [];
+      function walk(node) {
+        node.childNodes.forEach(child => {
+          if (child.nodeType === Node.TEXT_NODE) {
+            if (child.nodeValue && child.nodeValue.includes(k)) {
+              const frag = document.createDocumentFragment();
+              let s = child.nodeValue;
+              let idx = s.indexOf(k);
+              while (idx !== -1) {
+                if (idx > 0) frag.appendChild(document.createTextNode(s.slice(0, idx)));
+                const span = document.createElement('span');
+                span.className = 'highlight';
+                span.textContent = s.slice(idx, idx + k.length);
+                frag.appendChild(span);
+                searchResults.push(span);
+                s = s.slice(idx + k.length);
+                idx = s.indexOf(k);
+              }
+              if (s.length) frag.appendChild(document.createTextNode(s));
+              child.parentNode.replaceChild(frag, child);
+            }
+          } else walk(child);
+        });
+      }
+      walk(viewer);
+      searchCount.textContent = `${searchResults.length} 结果`;
+      if (searchResults.length > 0) { currentSearchIndex = 0; focusSearchResult(); }
+      else { toast('未找到匹配内容'); }
+    });
+
+    function focusSearchResult() {
+      searchResults.forEach((el, i) => el.style.background = i === currentSearchIndex ? 'orange' : '#fff59d');
+      const el = searchResults[currentSearchIndex];
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    nextBtn.addEventListener('click', () => {
+      if (!searchResults.length) return;
+      currentSearchIndex = (currentSearchIndex + 1) % searchResults.length; focusSearchResult();
+    });
+    prevBtn.addEventListener('click', () => {
+      if (!searchResults.length) return;
+      currentSearchIndex = (currentSearchIndex - 1 + searchResults.length) % searchResults.length; focusSearchResult();
+    });
+
+    // Schema builders with deduplication by structural signature
+    function buildTypescript(root) {
+      // signature -> typeName
+      const sigMap = new Map();
+      const decls = [];
+      let typeCounter = 1;
+
+      function sigOf(val) {
+        if (val === null) return 'null';
+        const t = typeof val;
+        if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint' || t === 'undefined') return t;
+        if (Array.isArray(val)) {
+          // array signature: [sig1|sig2]
+          const elems = val.map(v => sigOf(v));
+          const uniq = Array.from(new Set(elems)).sort();
+          return `Array<${uniq.join('|')}>`;
+        }
+        // object: signature ordered keys with sub-signatures
+        const keys = Object.keys(val).sort();
+        const parts = keys.map(k => `${k}:${sigOf(val[k])}`);
+        return `{${parts.join(',')}}`;
+      }
+
+      function ensureType(val, preferName) {
+        const s = sigOf(val);
+        if (sigMap.has(s)) return sigMap.get(s);
+        // generate type name
+        const name = (preferName && /^[A-Za-z]\w*$/.test(preferName)) ? capitalize(preferName) : `Type${typeCounter++}`;
+        sigMap.set(s, name);
+
+        // build declaration for object type only
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+          const keys = Object.keys(val).sort();
+          const lines = [];
+          for (const k of keys) {
+            const v = val[k];
+            const childType = typeNameFor(v, `${name}${capitalize(cleanKey(k))}`);
+            lines.push(`  ${safeProp(k)}: ${childType};`);
+          }
+          decls.push({ name, text: `interface ${name} {\n${lines.join('\n')}\n}` });
+        } else if (Array.isArray(val)) {
+          // if array's elements are objects and share signature, ensure those types
+          const elemSigs = Array.from(new Set(val.map(v => sigOf(v))));
+          for (const es of elemSigs) {
+            // find one sample element with that signature
+            const sample = val.find(v => sigOf(v) === es);
+            if (sample && typeof sample === 'object' && !Array.isArray(sample)) {
+              ensureType(sample, `${name}Item`);
+            }
+          }
+        }
+        return name;
+      }
+
+      function typeNameFor(v, prefer) {
+        if (v === null) return 'null';
+        const t = typeof v;
+        if (t === 'string') return 'string';
+        if (t === 'number') return 'number';
+        if (t === 'boolean') return 'boolean';
+        if (Array.isArray(v)) {
+          if (v.length === 0) return 'any[]';
+          // gather element type names
+          const types = Array.from(new Set(v.map(e => typeNameFor(e, prefer + 'Item'))));
+          return types.length === 1 ? `${types[0]}[]` : `(${types.join(' | ')})[]`;
+        }
+        if (t === 'object') {
+          return ensureType(v, prefer);
+        }
+        return 'any';
+      }
+
+      function cleanKey(k) { return String(k).replace(/[^a-zA-Z0-9]/g, '_'); }
+      function safeProp(k) { return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : JSON.stringify(k); }
+      function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+      // start
+      const rootTypeName = typeNameFor(root, 'Root');
+      // assemble declarations in reverse insertion order to better show dependencies
+      const codeParts = [];
+      if (!/^(string|number|boolean|null|any|undefined|bigint)/.test(rootTypeName)) {
+        // include interface decls (declarations may reference each other; show all)
+        for (const d of decls.reverse()) {
+          codeParts.push(d.text);
+        }
+      }
+      const header = `// TypeScript interfaces (deduped)\n// Root type: ${rootTypeName}\n\n`;
+      const footer = `\n// 使用示例:\n// const data: ${rootTypeName} = JSON.parse(jsonStr);\n`;
+      return header + codeParts.join('\n\n') + footer;
+    }
+
+    // JS schema builder with dedupe: returns objects where repeated shapes are reduced
+    function buildJsSchema(root) {
+      const shapeMap = new Map(); // sig -> id
+      let cnt = 1;
+      function sigOf(val) {
+        if (val === null) return 'null';
+        const t = typeof val;
+        if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint' || t === 'undefined') return t;
+        if (Array.isArray(val)) {
+          const elems = val.map(v => sigOf(v));
+          const uniq = Array.from(new Set(elems)).sort();
+          return `Array[${uniq.join('|')}]`;
+        }
+        const keys = Object.keys(val).sort();
+        const parts = keys.map(k => `${k}:${sigOf(val[k])}`);
+        return `{${parts.join(',')}}`;
+      }
+      function ensure(val) {
+        const s = sigOf(val);
+        if (shapeMap.has(s)) return shapeMap.get(s);
+        const id = `S${cnt++}`;
+        shapeMap.set(s, id);
+        return id;
+      }
+      function build(val) {
+        if (val === null) return 'null';
+        const t = typeof val;
+        if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint' || t === 'undefined') return t;
+        if (Array.isArray(val)) {
+          if (val.length === 0) return ['any'];
+          // build unique element schemas
+          const elems = val.map(v => build(v));
+          // unique by JSON text
+          const uniq = []; const seen = new Set();
+          for (const e of elems) {
+            const k = typeof e === 'object' ? JSON.stringify(e) : String(e);
+            if (!seen.has(k)) { uniq.push(e); seen.add(k); }
+          }
+          return uniq.length === 1 ? [uniq[0]] : uniq;
+        }
+        // object
+        const keys = Object.keys(val).sort();
+        const out = {};
+        for (const k of keys) out[k] = build(val[k]);
+        return out;
+      }
+      return build(root);
+    }
+
+
+    genTsBtn.addEventListener('click', () => {
+      const txt = jsonInput.value.trim();
+      const parsed = tryParse(txt);
+      if (!parsed) { alert('无效 JSON，无法生成 TS'); return; }
+      const code = buildTypescript(parsed);
+      schemaOutput.textContent = code || '// no result';
+      document.getElementById('rootName').textContent = 'Root';
+    });
+
+    genJsBtn.addEventListener('click', () => {
+      const txt = jsonInput.value.trim();
+      const parsed = tryParse(txt);
+      if (!parsed) { alert('无效 JSON，无法生成 JS schema'); return; }
+      const schema = buildJsSchema(parsed);
+      schemaOutput.textContent = `// JavaScript schema (deduped)\nconst schema = ${JSON.stringify(schema, null, 2)};\n`;
+      document.getElementById('rootName').textContent = 'Root';
+    });
+
+    copySchemaBtn.addEventListener('click', () => {
+      const txt = schemaOutput.textContent;
+      if (!txt.trim()) return toast('无可复制内容');
+      navigator.clipboard.writeText(txt).then(() => toast('结构已复制'));
+    });
+
+    // initial load
+    loadStorage();
+    let pasteTimer = null;
+    jsonInput.addEventListener('input', () => {
+      if (pasteTimer) clearTimeout(pasteTimer);
+      pasteTimer = setTimeout(() => {
+        const txt = jsonInput.value.trim();
+        const parsed = tryParse(txt);
+        if (parsed) {
+          if (txt.length < 200000) jsonInput.value = JSON.stringify(parsed, null, 2);
+          renderJson(parsed);
+        }
+      }, 500);
+    });
+
+    window.addEventListener('load', () => {
+      const txt = jsonInput.value.trim();
+      if (txt) {
+        const parsed = tryParse(txt);
+        if (parsed) renderJson(parsed);
+      }
+    });
+
+  </script>
+</body>
+
+</html>
