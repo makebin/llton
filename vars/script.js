@@ -7,7 +7,6 @@ let currentController = null;
 
 // 中文检测
 function hasChinese(str) { return /[\u4e00-\u9fa5]/.test(str); }
-
 // 翻译 API
 async function translateText(text) {
   if (currentController) {
@@ -21,6 +20,14 @@ async function translateText(text) {
   loadingDiv.textContent = '正在查询...';
   results.appendChild(loadingDiv);
 
+  // Set a timeout to abort the request after 20 seconds
+  const timeoutId = setTimeout(() => {
+    currentController.abort(); // Abort the request if it takes too long
+    if (loadingDiv.parentNode) {
+      loadingDiv.textContent = '请求超时，请重试';
+    }
+  }, 20000); // 20 seconds timeout
+
   try {
     const proxyUrl = `https://quiet-morning-b82c.mkb900716.workers.dev/?q=${encodeURIComponent(text)}`;
     const res = await fetch(proxyUrl, { method: 'GET', headers: { 'Accept': 'application/json' }, signal });
@@ -30,7 +37,8 @@ async function translateText(text) {
     if (e.name === 'AbortError') return { result: null }; // 请求被中断
     return { result: null };
   } finally {
-    if (loadingDiv.parentNode) results.removeChild(loadingDiv);
+    clearTimeout(timeoutId); // Clear the timeout when the request completes or fails
+    if (loadingDiv.parentNode) results.removeChild(loadingDiv); // Remove loading indicator
     currentController = null;
   }
 }
@@ -136,14 +144,23 @@ async function renderResults(str) {
         const item = document.createElement('div');
         item.className = 'translation-item';
         item.textContent = opt;
+
+        // Click event to select translation
         item.onclick = () => {
           wrap.querySelectorAll('.translation-item').forEach(el => el.classList.remove('active'));
           item.classList.add('active');
           renderFormats(opt);
         };
+
+        // Double-click event to copy the translation text
+        item.ondblclick = () => {
+          copyText(item.textContent);
+        };
+
         wrap.appendChild(item);
       });
     }
+
     const pre = document.createElement('div');
     pre.innerHTML = `${data?.result?.payload}`;
     rawOutput.appendChild(pre);
@@ -152,6 +169,7 @@ async function renderResults(str) {
     renderFormats(str);
   }
 }
+
 
 // 防抖输入监听
 let debounceTimer;
