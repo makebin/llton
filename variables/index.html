@@ -345,7 +345,7 @@
 
         if (!data?.result) {
           const pre = document.createElement('div');
-          pre.innerHTML = `${data?.output?.text}`;
+          pre.innerHTML = `${data?.result?.output?.text}`;
           results.appendChild(pre);
           return;
         }
@@ -379,7 +379,7 @@
           });
         } else {
           const pre = document.createElement('div');
-          pre.innerHTML = `${data?.output?.text}`;
+          pre.innerHTML = `${data?.result?.output?.text}`;
           rawOutput.appendChild(pre);
         }
 
