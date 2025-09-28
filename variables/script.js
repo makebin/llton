@@ -102,23 +102,21 @@ async function renderResults(str) {
   if (!str) return;
 
   const isNewQuery = str !== currentQuery;
-  if (isNewQuery) {
-    results.innerHTML = '';
-    rawOutput.innerHTML = '';
-    currentQuery = str;
-  }
+  results.innerHTML = '';
+  rawOutput.innerHTML = '';
+  currentQuery = str;
 
   if (hasChinese(str)) {
     const data = await translateText(str);
 
-    if (!data?.result) {
+    if (!data?.result?.payload) {
       const pre = document.createElement('div');
-      pre.innerHTML = `${data?.result?.output?.text}`;
-      results.appendChild(pre);
+      pre.innerHTML = `${data?.result?.payload}`;
+      rawOutput.appendChild(pre);
       return;
     }
 
-    if (Array.isArray(data?.result)) {
+    if (Array.isArray(data?.result?.dics)) {
       let tDiv = results.querySelector('.translations-group');
       if (!tDiv) {
         tDiv = document.createElement('div');
@@ -134,7 +132,7 @@ async function renderResults(str) {
       }
       const wrap = tDiv.querySelector('.translations');
       wrap.innerHTML = '';
-      data.result.forEach(opt => {
+      (data?.result?.dics || []).forEach(opt => {
         const item = document.createElement('div');
         item.className = 'translation-item';
         item.textContent = opt;
@@ -145,11 +143,10 @@ async function renderResults(str) {
         };
         wrap.appendChild(item);
       });
-    } else {
-      const pre = document.createElement('div');
-      pre.innerHTML = `${data?.result?.output?.text}`;
-      rawOutput.appendChild(pre);
     }
+    const pre = document.createElement('div');
+    pre.innerHTML = `${data?.result?.payload}`;
+    rawOutput.appendChild(pre);
 
   } else {
     renderFormats(str);
