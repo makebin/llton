@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>屏幕取色器 — 取色 / 转换 / 复制 / 生成互补与过渡色</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --accent: #06b6d4;
+      --muted: #9ca3af;
+      color-scheme: dark
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      font-family: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, var(--bg), #071126);
+      color: #e6eef8
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 28px auto;
+      padding: 24px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+      border-radius: 12px;
+      box-shadow: 0 6px 30px rgba(2, 6, 23, 0.6)
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 20px
+    }
+
+    p.lead {
+      margin: 0 0 18px;
+      color: var(--muted)
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 18px
+    }
+
+    .btn {
+      background: var(--card);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 10px 14px;
+      border-radius: 8px;
+      color: inherit;
+      cursor: pointer
+    }
+
+    .btn.primary {
+      background: linear-gradient(90deg, var(--accent), #3b82f6);
+      color: #062024
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 16px
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.02);
+      padding: 12px;
+      border-radius: 10px
+    }
+
+    .preview {
+      height: 160px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700
+    }
+
+    .values {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 10px
+    }
+
+    .val {
+      padding: 8px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.18);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .swatches {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px
+    }
+
+    .swatch {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 2px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 6px 18px rgba(2, 6, 23, 0.4)
+    }
+
+    .swatch-label {
+      font-size: 12px;
+      margin-top: 6px;
+      text-align: center;
+      color: var(--muted)
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center
+    }
+
+    .hint {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 10px
+    }
+
+    input[type=file] {
+      display: none
+    }
+
+    .copy {
+      cursor: pointer;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px dashed rgba(255, 255, 255, 0.03)
+    }
+
+    @media(max-width:840px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .preview {
+        height: 120px
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>屏幕取色器</h1>
+    <p class="lead">点击「取色」从屏幕读取颜色（现代浏览器支持 EyeDropper）。若不支持，请上传图片并在图片上点击取色。自动展示 Hex / RGB / RGBA / HSL，并生成互补色、tint/shade
+      与过渡色。点击任一颜色值可复制。</p>
+
+    <div class="controls">
+      <button id="pickBtn" class="btn primary">取色（Pick color）</button>
+      <label class="btn" for="imgUpload">上传图片备用 / 画布采样</label>
+      <input id="imgUpload" type="file" accept="image/*">
+      <button id="copyAll" class="btn">复制所有 Hex（逗号分隔）</button>
+      <div style="flex:1"></div>
+      <div class="small hint">注意：EyeDropper 需在 HTTPS / localhost 下工作，且仅在支持的浏览器中可用。</div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <div id="preview" class="preview">未选色</div>
+        <div class="values" id="values"></div>
+
+        <div class="swatches" id="swatches"></div>
+        <div class="hint">点击任一色块或值进行复制。</div>
+      </div>
+
+      <div class="panel">
+        <div class="row"><strong>生成的色系</strong><span class="small">点击复制</span></div>
+        <div style="margin-top:10px">
+          <div class="list" id="generated"></div>
+        </div>
+
+        <hr style="opacity:0.06;margin:12px 0">
+        <div>
+          <label class="small">过渡色步数: <input id="steps" type="number" min="2" max="12" value="6"
+              style="width:70px;margin-left:8px"></label>
+          <label class="small" style="margin-left:12px">包含 alpha: <input id="withAlpha" type="checkbox" checked
+              style="margin-left:6px"></label>
+        </div>
+
+        <div class="hint">如果浏览器不支持 EyeDropper，会显示图片上传区域，上传后在图片上点击取色。</div>
+        <canvas id="canvas" style="display:none"></canvas>
+        <img id="uploadedImg" style="max-width:100%;margin-top:10px;display:none;border-radius:8px;cursor:crosshair"
+          alt="上传后点击取色">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Helper: clamp
+    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+    // Color conversion helpers
+    function rgbToHex(r, g, b) {
+      const toHex = x => (Math.round(x).toString(16).padStart(2, '0'));
+      return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+    }
+
+    function hexToRgb(hex) {
+      hex = hex.replace('#', '');
+      if (hex.length === 3) hex = hex.split('').map(s => s + s).join('');
+      const n = parseInt(hex, 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h = 0, s = 0, l = (max + min) / 2;
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+        }
+        h *= 60;
+      }
+      return [Math.round(h), +(s * 100).toFixed(1), +(l * 100).toFixed(1)];
+    }
+
+    function hslToRgb(h, s, l) {
+      s /= 100; l /= 100;
+      const c = (1 - Math.abs(2 * l - 1)) * s;
+      const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+      const m = l - c / 2;
+      let r = 0, g = 0, b = 0;
+      if (h >= 0 && h < 60) { r = c; g = x; b = 0 }
+      else if (h < 120) { r = x; g = c; b = 0 }
+      else if (h < 180) { r = 0; g = c; b = x }
+      else if (h < 240) { r = 0; g = x; b = c }
+      else if (h < 300) { r = x; g = 0; b = c }
+      else { r = c; g = 0; b = x }
+      return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+    }
+
+    function rgbaString(r, g, b, a) { return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${+a.toFixed(2)})` }
+    function rgbString(r, g, b) { return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})` }
+    function hslString(h, s, l) { return `hsl(${h} ${s}% ${l}%)` }
+
+    // Generate complementary color (hue +180)
+    function complementaryFromRgb(r, g, b) {
+      const [h, s, l] = rgbToHsl(r, g, b);
+      const h2 = (h + 180) % 360;
+      const [r2, g2, b2] = hslToRgb(h2, s, l);
+      return { r: r2, g: g2, b: b2, h: h2, s, l };
+    }
+
+    // Generate N step gradient between two RGB colors
+    function interpolateColors(rgb1, rgb2, steps) {
+      const out = [];
+      for (let i = 0; i < steps; i++) {
+        const t = i / (steps - 1);
+        const r = Math.round(rgb1[0] + (rgb2[0] - rgb1[0]) * t);
+        const g = Math.round(rgb1[1] + (rgb2[1] - rgb1[1]) * t);
+        const b = Math.round(rgb1[2] + (rgb2[2] - rgb1[2]) * t);
+        out.push([r, g, b]);
+      }
+      return out;
+    }
+
+    // Tints/shades (mix with white/black)
+    function mixWith(rgb, other, t) {
+      return [Math.round(rgb[0] * (1 - t) + other[0] * t), Math.round(rgb[1] * (1 - t) + other[1] * t), Math.round(rgb[2] * (1 - t) + other[2] * t)];
+    }
+
+    // UI wiring
+    const pickBtn = document.getElementById('pickBtn');
+    const preview = document.getElementById('preview');
+    const values = document.getElementById('values');
+    const swatches = document.getElementById('swatches');
+    const generated = document.getElementById('generated');
+    const imgUpload = document.getElementById('imgUpload');
+    const uploadedImg = document.getElementById('uploadedImg');
+    const canvas = document.getElementById('canvas');
+    const copyAll = document.getElementById('copyAll');
+    const stepsInput = document.getElementById('steps');
+    const withAlpha = document.getElementById('withAlpha');
+
+    let lastColor = null; // {r,g,b,a}
+
+    function showColor(r, g, b, a = 1) {
+      lastColor = { r, g, b, a };
+      preview.style.background = rgbaString(r, g, b, a);
+      preview.textContent = '';
+      values.innerHTML = '';
+      swatches.innerHTML = '';
+      generated.innerHTML = '';
+
+      const hex = rgbToHex(r, g, b);
+      const rgb = rgbString(r, g, b);
+      const rgba = rgbaString(r, g, b, a);
+      const [h, s, l] = rgbToHsl(r, g, b);
+      const hsl = hslString(h, s, l);
+
+      const items = [
+        ['HEX', hex],
+        ['RGB', rgb],
+        ['RGBA', rgba],
+        ['HSL', hsl]
+      ];
+
+      items.forEach(([k, v]) => {
+        const el = document.createElement('div'); el.className = 'val';
+        el.innerHTML = `<div><div style="font-weight:600">${k}</div><div class="small">${v}</div></div>`;
+        const cp = document.createElement('div'); cp.className = 'copy'; cp.textContent = '复制';
+        cp.onclick = () => copyText(v, cp);
+        el.appendChild(cp);
+        values.appendChild(el);
+      });
+
+      // main swatch and variants
+      const mainSw = document.createElement('div'); mainSw.className = 'swatch'; mainSw.style.background = hex; mainSw.title = hex;
+      mainSw.onclick = () => copyText(hex, mainSw);
+      swatches.appendChild(mainSw);
+
+      // complementary
+      const comp = complementaryFromRgb(r, g, b);
+      const compHex = rgbToHex(comp.r, comp.g, comp.b);
+      const compSw = document.createElement('div'); compSw.className = 'swatch'; compSw.style.background = compHex; compSw.title = '互补色 ' + compHex;
+      compSw.onclick = () => copyText(compHex, compSw);
+      swatches.appendChild(compSw);
+
+      // tints/shades
+      const tints = [0.2, 0.4, 0.6, 0.8].map(t => mixWith([r, g, b], [255, 255, 255], t));
+      const shades = [0.2, 0.4, 0.6, 0.8].map(t => mixWith([r, g, b], [0, 0, 0], t));
+      tints.concat(shades).forEach(c => {
+        const hx = rgbToHex(c[0], c[1], c[2]);
+        const sw = document.createElement('div'); sw.className = 'swatch'; sw.style.background = hx; sw.title = hx; sw.onclick = () => copyText(hx, sw);
+        swatches.appendChild(sw);
+      });
+
+      // generated sections: complement, gradient between color and complement, steps tints/shades
+      const stepCount = clamp(parseInt(stepsInput.value || 6), 2, 12);
+      const includeAlpha = withAlpha.checked;
+      addGeneratedSection('原色', [[r, g, b]]);
+      addGeneratedSection('互补色', [[comp.r, comp.g, comp.b]]);
+      const grad = interpolateColors([r, g, b], [comp.r, comp.g, comp.b], stepCount);
+      addGeneratedSection(`过渡色 (${stepCount})`, grad, includeAlpha);
+
+      // tints and shades lists
+      addGeneratedSection('Tints (与白色混合)', tints);
+      addGeneratedSection('Shades (与黑色混合)', shades);
+
+      // copy all button update
+      copyAll.onclick = () => {
+        const hexes = [hex, compHex].concat(tints.map(c => rgbToHex(...c))).concat(shades.map(c => rgbToHex(...c)));
+        navigator.clipboard.writeText(hexes.join(', ')).then(() => { flash(copyAll, '已复制'); }, () => { flash(copyAll, '复制失败') });
+      }
+    }
+
+    function addGeneratedSection(title, rgbList, includeAlpha = false) {
+      const sec = document.createElement('div');
+      const head = document.createElement('div'); head.style.display = 'flex'; head.style.justifyContent = 'space-between'; head.style.alignItems = 'center';
+      head.innerHTML = `<strong>${title}</strong><span class="small">点击复制</span>`;
+      sec.appendChild(head);
+
+      const container = document.createElement('div'); container.style.display = 'flex'; container.style.gap = '8px'; container.style.marginTop = '8px'; container.style.flexWrap = 'wrap';
+      rgbList.forEach(rgb => {
+        const hx = rgbToHex(rgb[0], rgb[1], rgb[2]);
+        const rStr = includeAlpha ? rgbaString(rgb[0], rgb[1], rgb[2], (lastColor?.a || 1)) : hx;
+        const sw = document.createElement('div'); sw.style.display = 'flex'; sw.style.flexDirection = 'column'; sw.style.alignItems = 'center';
+        const block = document.createElement('div'); block.className = 'swatch'; block.style.background = hx; block.onclick = () => copyText(rStr, block);
+        const lbl = document.createElement('div'); lbl.className = 'swatch-label'; lbl.textContent = hx;
+        sw.appendChild(block); sw.appendChild(lbl);
+        container.appendChild(sw);
+      });
+
+      sec.appendChild(container);
+      generated.appendChild(sec);
+    }
+
+    // copy helper with tiny flash
+    function copyText(text, el) {
+      navigator.clipboard.writeText(text).then(() => {
+        flash(el, '已复制: ' + text);
+      }).catch(() => {
+        // fallback: select temp textarea
+        const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); flash(el, '已复制'); } catch (e) { alert('复制失败，请手动: ' + text); }
+        ta.remove();
+      });
+    }
+
+    function flash(el, msg) {
+      const orig = el.textContent;
+      el.textContent = msg;
+      setTimeout(() => { el.textContent = orig; }, 900);
+    }
+
+    // EyeDropper usage
+    async function pickWithEyeDropper() {
+      if (!window.EyeDropper) throw new Error('EyeDropper 不被支持');
+      const eye = new EyeDropper();
+      const res = await eye.open(); // returns {sRGBHex: '#RRGGBB'}
+      const rgb = hexToRgb(res.sRGBHex);
+      showColor(rgb[0], rgb[1], rgb[2], 1);
+    }
+
+    // Canvas image sampling
+    function setupImageSampler(img) {
+      uploadedImg.style.display = 'block';
+      uploadedImg.src = URL.createObjectURL(img);
+      uploadedImg.onload = () => {
+        const w = uploadedImg.naturalWidth, h = uploadedImg.naturalHeight;
+        canvas.width = w; canvas.height = h; const ctx = canvas.getContext('2d'); ctx.drawImage(uploadedImg, 0, 0);
+      }
+    }
+
+    uploadedImg.addEventListener('click', (ev) => {
+      const rect = uploadedImg.getBoundingClientRect();
+      const scaleX = uploadedImg.naturalWidth / rect.width;
+      const scaleY = uploadedImg.naturalHeight / rect.height;
+      const x = Math.floor((ev.clientX - rect.left) * scaleX);
+      const y = Math.floor((ev.clientY - rect.top) * scaleY);
+      const ctx = canvas.getContext('2d');
+      const p = ctx.getImageData(x, y, 1, 1).data;
+      showColor(p[0], p[1], p[2], (p[3] || 255) / 255);
+    });
+
+    imgUpload.addEventListener('change', (ev) => {
+      const f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      setupImageSampler(f);
+    });
+
+    pickBtn.addEventListener('click', async () => {
+      // If EyeDropper available, use it. Otherwise, open file selector to upload image.
+      if (window.EyeDropper) {
+        try {
+          await pickWithEyeDropper();
+        } catch (err) {
+          alert('取色失败: ' + err.message);
+        }
+      } else {
+        // Fallback: trigger upload, and instruct user to click image
+        imgUpload.click();
+        alert('当前浏览器不支持 EyeDropper，已打开图片选择。上传后在图片上点击取色。');
+      }
+    });
+
+    // keyboard shortuct: P to pick
+    window.addEventListener('keydown', (e) => { if (e.key === 'p' || e.key === 'P') pickBtn.click(); });
+
+    // initialize with a default color
+    showColor(99, 102, 241, 1);
+  </script>
+</body>
+
+</html>
