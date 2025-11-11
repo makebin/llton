@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Box Shadow 效果 + 源码可见 + 一键复制</title>
+  <style>
+    body {
+      font-family: Arial;
+      background: #f5f5f5;
+      padding: 30px;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    .wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .box-container {
+      width: 220px;
+      background: #fff;
+      border-radius: 10px;
+      padding: 12px;
+      box-sizing: border-box;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .box {
+      width: 100%;
+      height: 100px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 6px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .title {
+      font-size: 14px;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    button {
+      width: 100%;
+      padding: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-bottom: 6px;
+    }
+
+    pre {
+      background: #eee;
+      padding: 6px;
+      font-size: 12px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+
+    /* ==== 常用阴影效果 ==== */
+    .shadow-soft {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .shadow-strong {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .shadow-inset {
+      box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.25);
+    }
+
+    .shadow-layer {
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.08);
+    }
+
+    .shadow-neon {
+      background: #111;
+      color: #00eaff;
+      box-shadow: 0 0 20px rgba(0, 230, 255, 0.75);
+    }
+
+    .shadow-float {
+      border-radius: 50px;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .shadow-glow {
+      box-shadow: 0 0 25px rgba(100, 150, 255, 0.5);
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Box Shadow 效果 Demo</h1>
+
+  <div class="wrap">
+
+    <!-- 轻柔卡片 -->
+    <div class="box-container">
+      <div class="title">轻柔卡片</div>
+      <div class="box shadow-soft">soft shadow</div>
+      <button onclick="copyCSS('.shadow-soft { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }')">复制 CSS</button>
+      <pre>.shadow-soft { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }</pre>
+    </div>
+
+    <!-- 强烈卡片 -->
+    <div class="box-container">
+      <div class="title">强烈卡片</div>
+      <div class="box shadow-strong">strong shadow</div>
+      <button onclick="copyCSS('.shadow-strong { box-shadow: 0 8px 24px rgba(0,0,0,0.25); }')">复制 CSS</button>
+      <pre>.shadow-strong { box-shadow: 0 8px 24px rgba(0,0,0,0.25); }</pre>
+    </div>
+
+    <!-- 内阴影 -->
+    <div class="box-container">
+      <div class="title">内阴影</div>
+      <div class="box shadow-inset">inset shadow</div>
+      <button onclick="copyCSS('.shadow-inset { box-shadow: inset 0 4px 10px rgba(0,0,0,0.25); }')">复制 CSS</button>
+      <pre>.shadow-inset { box-shadow: inset 0 4px 10px rgba(0,0,0,0.25); }</pre>
+    </div>
+
+    <!-- 双层阴影 -->
+    <div class="box-container">
+      <div class="title">双层阴影</div>
+      <div class="box shadow-layer">layer shadow</div>
+      <button
+        onclick="copyCSS('.shadow-layer { box-shadow: 0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08); }')">复制
+        CSS</button>
+      <pre>.shadow-layer { box-shadow: 0 2px 4px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08); }</pre>
+    </div>
+
+    <!-- 霓虹光 -->
+    <div class="box-container">
+      <div class="title">霓虹光</div>
+      <div class="box shadow-neon">neon</div>
+      <button
+        onclick="copyCSS('.shadow-neon { background: #111; color: #00eaff; box-shadow: 0 0 20px rgba(0,230,255,0.75); }')">复制
+        CSS</button>
+      <pre>.shadow-neon { background: #111; color: #00eaff; box-shadow: 0 0 20px rgba(0,230,255,0.75); }</pre>
+    </div>
+
+    <!-- 悬浮按钮 -->
+    <div class="box-container">
+      <div class="title">悬浮按钮</div>
+      <div class="box shadow-float">float</div>
+      <button onclick="copyCSS('.shadow-float { border-radius: 50px; box-shadow: 0 10px 20px rgba(0,0,0,0.25); }')">复制
+        CSS</button>
+      <pre>.shadow-float { border-radius: 50px; box-shadow: 0 10px 20px rgba(0,0,0,0.25); }</pre>
+    </div>
+
+    <!-- 发光效果 -->
+    <div class="box-container">
+      <div class="title">发光效果</div>
+      <div class="box shadow-glow">glow</div>
+      <button onclick="copyCSS('.shadow-glow { box-shadow: 0 0 25px rgba(100,150,255,0.5); }')">复制 CSS</button>
+      <pre>.shadow-glow { box-shadow: 0 0 25px rgba(100,150,255,0.5); }</pre>
+    </div>
+
+  </div>
+
+  <script>
+    function copyCSS(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert('CSS 已复制到剪贴板！');
+      }).catch(() => {
+        alert('复制失败，请手动复制！');
+      });
+    }
+  </script>
+
+</body>
+
+</html>
