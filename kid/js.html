@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>儿童算术练习</title>
+  <style>
+    body {
+      font-family: "Comic Sans MS", system-ui;
+      background: url('https://i.imgur.com/jr3oK3O.png') no-repeat center/cover;
+      padding: 20px;
+      text-align: center;
+    }
+    .card {
+      background: rgba(255,255,255,0.9);
+      border-radius: 20px;
+      padding: 20px;
+      max-width: 420px;
+      margin: 0 auto;
+      box-shadow: 0 8px 20px rgba(255,100,150,0.2);
+    }
+    .qbox {
+      font-size: 32px;
+      margin: 20px 0;
+      color: #ff4f7a;
+      font-weight: bold;
+    }
+    .input-display {
+      font-size: 32px;
+      height: 48px;
+      background: #fff5fa;
+      border-radius: 12px;
+      text-align: center;
+      line-height: 48px;
+      margin-bottom: 15px;
+      border: 2px solid #ffc4d6;
+    }
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 10px;
+      justify-items: center;
+    }
+    .key {
+      width: 80px;
+      height: 60px;
+      background: #ff8fb3;
+      border-radius: 15px;
+      font-size: 24px;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(255,100,150,0.3);
+      transition: transform 0.1s;
+    }
+    .key:active { transform: scale(0.94); }
+    .key#del { background: #ffa6c9; }
+    .key#zero { width: 80px; }
+    .key#dot { width: 80px; }
+    .stats { margin-top: 20px; font-size: 18px; color: #ff4f7a; }
+    button.nextBtn { margin-top: 20px; padding: 10px 20px; font-size: 18px; border: 0; background: #ff4f7a; color: white; border-radius: 12px; cursor: pointer; }
+    .anim-popup { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); padding: 20px 30px; font-size: 32px; border-radius: 20px; animation: pop 0.6s ease-out; z-index: 9999; }
+    .anim-popup.success { background: #a8ffb1; }
+    .anim-popup.error { background: #ffb1b1; }
+    .streak { position: fixed; top: 10%; left: 50%; transform: translateX(-50%); font-size: 40px; animation: float 1s ease-out; }
+    @keyframes pop { 0% { transform: translate(-50%, -50%) scale(0.2); opacity:0; } 60% { transform: translate(-50%, -50%) scale(1.2); opacity:1; } 100% { transform: translate(-50%, -50%) scale(1); } }
+    @keyframes float { 0% { opacity:0; transform:translate(-50%,-20px); } 20% { opacity:1; } 100% { opacity:0; transform:translate(-50%,-80px); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 style="color:#ff4f7a">可爱算术小练习</h2>
+
+    <div id="question" class="qbox"></div>
+    <div id="display" class="input-display"></div>
+
+    <div class="keypad">
+      <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+      <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+      <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+      <div class="key" id="dot">.</div>
+      <div class="key" id="zero">0</div>
+      <div class="key" id="del">删除</div>
+    </div>
+
+    <button class="nextBtn" id="submit">确认并下一题</button>
+    <div id="stats" class="stats"></div>
+  </div>
+
+  <script>
+    function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+
+    let todayKey = new Date().toISOString().slice(0,10);
+    let saved = JSON.parse(localStorage.getItem('train-'+todayKey) || '{}');
+    let correct = saved.correct || 0;
+    let total = saved.total || 0;
+    let streak = 0;
+    let level = 1; // 1 = 简单(1-20), 2 = 进阶(1-30)
+    let answer = 0;
+
+    function save(){ localStorage.setItem('train-'+todayKey, JSON.stringify({correct,total})); }
+
+    function safeExpression() {
+      let a, b, c, op1, op2, res;
+      let ops = ['+', '-', '*'];
+      let maxNum = level === 1 ? 20 : 30;
+
+      while(true){
+        a = rand(1,maxNum);
+        b = rand(1,maxNum);
+        c = rand(1,maxNum);
+        op1 = ops[rand(0,2)];
+        op2 = ops[rand(0,2)];
+        if(op1 === '*' && op2 === '*') continue; // 避免连续乘法
+        res = eval(`${a} ${op1} ${b} ${op2} ${c}`);
+        if(res >=0 && res <= 100 && Number.isInteger(res)) return {a,b,c,op1,op2,res};
+      }
+    }
+
+    function newQuestion(){
+      let q = safeExpression();
+      answer = q.res;
+      document.getElementById('question').textContent = `${q.a} ${q.op1} ${q.b} ${q.op2} ${q.c} = ?`;
+      document.getElementById('display').textContent = '';
+    }
+
+    function showAnimation(type, text){
+      const anim = document.createElement('div');
+      anim.className = 'anim-popup ' + type;
+      anim.innerText = text;
+      document.body.appendChild(anim);
+      setTimeout(()=>anim.remove(),1000);
+    }
+
+    function showStreak(){
+      const anim = document.createElement('div');
+      anim.className = 'streak';
+      anim.innerText = '🎉⭐';
+      document.body.appendChild(anim);
+      setTimeout(()=>anim.remove(),1000);
+    }
+
+    document.querySelectorAll('.key').forEach(k=>{
+      k.onclick = ()=>{
+        if(k.id==='del'){
+          let t = document.getElementById('display').textContent;
+          document.getElementById('display').textContent = t.slice(0,-1);
+        } else {
+          document.getElementById('display').textContent += k.textContent;
+        }
+      }
+    });
+
+    document.getElementById('submit').onclick = ()=>{
+      let val = document.getElementById('display').textContent;
+      if(val==='') return;
+      total++;
+      if(Number(val) === answer){
+        correct++;
+        streak++;
+        showAnimation('success','🎉 太棒了！');
+        if(streak % 3 === 0) showStreak();
+        if(streak >= 3) level = 2; // 连对3题进入进阶
+      } else {
+        streak = 0;
+        showAnimation('error','❌ 再试试！');
+        level = 1; // 回到简单模式
+      }
+      save();
+      document.getElementById('stats').textContent = `正确率：${Math.round(correct/total*100)}% (${correct}/${total})`;
+      newQuestion();
+    };
+
+    document.getElementById('stats').textContent = `正确率：${total?Math.round(correct/total*100):0}% (${correct}/${total})`;
+    newQuestion();
+  </script>
+</body>
+</html>
